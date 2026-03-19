@@ -36,6 +36,53 @@
 
 ---
 
+## Memorization Cheat Sheet
+
+> **6 steps. 3 actors. Remember: KDC twice, Service once.**
+
+```
+ ┌──────────────────────────────────────────────────────────────────┐
+ │                                                                  │
+ │   CLIENT            KDC (AS)         KDC (TGS)       SERVICE    │
+ │     │                  │                  │               │      │
+ │     │                  │                  │               │      │
+ │  1. │── AS-REQ ───────►│                  │               │      │
+ │     │   "Who I am"     │                  │               │      │
+ │     │                  │                  │               │      │
+ │  2. │◄─ AS-REP ────────│                  │               │      │
+ │     │   TGT + Sess.Key │                  │               │      │
+ │     │                  │                  │               │      │
+ │  3. │── TGS-REQ ───────┼─────────────────►│               │      │
+ │     │   TGT + SPN      │                  │               │      │
+ │     │                  │                  │               │      │
+ │  4. │◄─ TGS-REP ───────┼──────────────────│               │      │
+ │     │   Svc Ticket     │                  │               │      │
+ │     │   + Svc Sess.Key │                  │               │      │
+ │     │                  │                  │               │      │
+ │  5. │── AP-REQ ────────┼──────────────────┼──────────────►│      │
+ │     │   Svc Ticket     │                  │               │      │
+ │     │                  │                  │               │      │
+ │  6. │◄─ AP-REP ────────┼──────────────────┼───────────────│      │
+ │     │   (optional)     │                  │               │      │
+ │     │                  │                  │               │      │
+ │     │════════ You're in! Session begins ══════════════════│      │
+ │                                                                  │
+ └──────────────────────────────────────────────────────────────────┘
+```
+
+### The 6 steps in one sentence each
+
+| # | Message | One-liner |
+|---|---------|-----------|
+| 1 | **AS-REQ** | Client proves identity to KDC with an encrypted timestamp |
+| 2 | **AS-REP** | KDC hands back a TGT (opaque) + Session Key (readable) |
+| 3 | **TGS-REQ** | Client gives TGT back + asks for a ticket to a specific service |
+| 4 | **TGS-REP** | KDC hands back a Service Ticket (opaque) + Service Session Key |
+| 5 | **AP-REQ** | Client gives Service Ticket directly to the service |
+| 6 | **AP-REP** | Service confirms it decrypted the ticket *(mutual auth only)* |
+
+---
+
 ## Phase 1 — Prove Who You Are (AS Exchange)
 
 **Goal:** Get a TGT from the KDC.
