@@ -1,226 +1,37 @@
-# Kerberos Authentication Flow in Active Directory
+# Kerberos Authentication — Interview Reference
 
-> **Interview tip:** Think of Kerberos like a concert venue. You show your ID at the gate (AS exchange) to get a wristband (TGT). Then you show the wristband at the bar (TGS exchange) to get a drink token (Service Ticket). Finally, you hand the drink token to the bartender (AP exchange) to get your drink — no one ever asks for your ID again.
+## 30-Second Answer
 
----
-
-## Key Players
-
-| Who | What They Do |
-|-----|-------------|
-| **Client** | The user or machine that wants access |
-| **KDC** | Key Distribution Center — lives on the Domain Controller; the trusted middleman |
-| **AS** | Authentication Service — part of KDC; hands out TGTs |
-| **TGS** | Ticket-Granting Service — part of KDC; hands out Service Tickets |
-| **TGT** | Ticket-Granting Ticket — your "wristband"; proves who you are to the KDC |
-| **Service Ticket (ST)** | Your "drink token"; grants access to one specific service |
-| **Service / SPN** | The resource you want to reach (file server, web app, etc.) |
+Kerberos authenticates users without sending passwords over the network. It uses a trusted third party called the KDC to issue tickets. You get a TGT to prove who you are, exchange it for a Service Ticket to reach a specific resource, then present that ticket directly to the service.
 
 ---
 
-## The Big Picture
+## 3-Step Explanation
 
-```
-                        ┌─────────────────────────┐
-                        │   KDC (Domain Controller)│
-                        │  ┌──────┐   ┌─────────┐  │
-         1. AS-REQ ───► │  │  AS  │   │   TGS   │  │ ◄─── 3. TGS-REQ
-         2. AS-REP ◄─── │  │      │   │         │  │ ───► 4. TGS-REP
-                        │  └──────┘   └─────────┘  │
-                        └─────────────────────────┘
-  ┌────────┐                                              ┌─────────┐
-  │ Client │ ──────────────── 5. AP-REQ ───────────────► │ Service │
-  └────────┘ ◄──────────────── 6. AP-REP ─────────────── └─────────┘
-                           (optional — mutual auth)
-```
+**Step 1 — Get your TGT (prove identity to the KDC)**
+You send your username and an encrypted timestamp to the KDC. The KDC verifies it and hands back a Ticket-Granting Ticket (TGT) — your proof of identity — plus a session key you can use to talk to the KDC again.
+
+**Step 2 — Get a Service Ticket (tell the KDC what you want)**
+You hand the TGT back to the KDC along with the name of the service you want to reach. The KDC issues a Service Ticket for that specific resource, encrypted with the service's own key.
+
+**Step 3 — Access the service (no KDC involved)**
+You take the Service Ticket directly to the service. The service decrypts it with its own key, verifies you, and lets you in. The KDC is out of the picture from this point on.
 
 ---
 
-## Memorization Cheat Sheet
+## Key Points to Drop in an Interview
 
-> **6 steps. 3 actors. Remember: KDC twice, Service once.**
-
-```
- ┌──────────────────────────────────────────────────────────────────┐
- │                                                                  │
- │   CLIENT            KDC (AS)         KDC (TGS)       SERVICE    │
- │     │                  │                  │               │      │
- │     │                  │                  │               │      │
- │  1. │── AS-REQ ───────►│                  │               │      │
- │     │   "Who I am"     │                  │               │      │
- │     │                  │                  │               │      │
- │  2. │◄─ AS-REP ────────│                  │               │      │
- │     │   TGT + Sess.Key │                  │               │      │
- │     │                  │                  │               │      │
- │  3. │── TGS-REQ ───────┼─────────────────►│               │      │
- │     │   TGT + SPN      │                  │               │      │
- │     │                  │                  │               │      │
- │  4. │◄─ TGS-REP ───────┼──────────────────│               │      │
- │     │   Svc Ticket     │                  │               │      │
- │     │   + Svc Sess.Key │                  │               │      │
- │     │                  │                  │               │      │
- │  5. │── AP-REQ ────────┼──────────────────┼──────────────►│      │
- │     │   Svc Ticket     │                  │               │      │
- │     │                  │                  │               │      │
- │  6. │◄─ AP-REP ────────┼──────────────────┼───────────────│      │
- │     │   (optional)     │                  │               │      │
- │     │                  │                  │               │      │
- │     │════════ You're in! Session begins ══════════════════│      │
- │                                                                  │
- └──────────────────────────────────────────────────────────────────┘
-```
-
-### The 6 steps in one sentence each
-
-| # | Message | One-liner |
-|---|---------|-----------|
-| 1 | **AS-REQ** | Client proves identity to KDC with an encrypted timestamp |
-| 2 | **AS-REP** | KDC hands back a TGT (opaque) + Session Key (readable) |
-| 3 | **TGS-REQ** | Client gives TGT back + asks for a ticket to a specific service |
-| 4 | **TGS-REP** | KDC hands back a Service Ticket (opaque) + Service Session Key |
-| 5 | **AP-REQ** | Client gives Service Ticket directly to the service |
-| 6 | **AP-REP** | Service confirms it decrypted the ticket *(mutual auth only)* |
+- Passwords never travel the network — only encrypted timestamps and tickets
+- The TGT is encrypted with the `krbtgt` key; the client cannot read it
+- Each Service Ticket is scoped to one service only
+- Timestamps must be within 5 minutes — this prevents replay attacks
+- Kerberos enables SSO: one TGT unlocks many services without re-authenticating
 
 ---
 
-## Phase 1 — Prove Who You Are (AS Exchange)
+## Common Attack Names (know these)
 
-**Goal:** Get a TGT from the KDC.
-
-### Step 1 › Client → KDC: `AS-REQ`
-
-The client asks the KDC to authenticate it.
-
-```
-AS-REQ contains:
-  ├── Username          (plaintext)
-  └── Encrypted timestamp  (encrypted with the user's password hash)
-```
-
-> The password hash is never sent — only a timestamp locked with it. This is called **pre-authentication**.
-
-### Step 2 › KDC → Client: `AS-REP`
-
-The KDC looks up the user's password hash, decrypts the timestamp to verify it's fresh, then replies with two things:
-
-```
-AS-REP contains:
-  ├── TGT               (encrypted with the krbtgt key — client CANNOT read this)
-  └── Session Key       (encrypted with the client's password hash — client CAN read this)
-```
-
-The client stores the TGT and Session Key in its **credential cache** (e.g., `klist`).
-
-> TGT default lifetime: **10 hours** in Active Directory.
-
----
-
-## Phase 2 — Get a Ticket for a Specific Service (TGS Exchange)
-
-**Goal:** Trade your TGT for a Service Ticket to reach a specific resource.
-
-### Step 3 › Client → KDC: `TGS-REQ`
-
-```
-TGS-REQ contains:
-  ├── TGT               (client hands this back to the KDC)
-  ├── Authenticator     (timestamp encrypted with the Session Key)
-  └── Target SPN        (e.g., cifs/fileserver.corp.local)
-```
-
-The KDC decrypts the TGT with its own `krbtgt` key, retrieves the Session Key inside it, then uses that to verify the Authenticator.
-
-### Step 4 › KDC → Client: `TGS-REP`
-
-```
-TGS-REP contains:
-  ├── Service Ticket    (encrypted with the service's key — client CANNOT read this)
-  └── Service Session Key (encrypted with the client's Session Key — client CAN read this)
-```
-
----
-
-## Phase 3 — Access the Service (AP Exchange)
-
-**Goal:** Prove to the service that you have a valid ticket.
-
-### Step 5 › Client → Service: `AP-REQ`
-
-The client goes directly to the service — no KDC involved here.
-
-```
-AP-REQ contains:
-  ├── Service Ticket    (still opaque to the client)
-  └── Authenticator     (timestamp encrypted with Service Session Key)
-```
-
-The service decrypts the ticket with its own key (from its AD machine account), extracts the Service Session Key, and uses it to verify the Authenticator.
-
-### Step 6 › Service → Client: `AP-REP` *(optional)*
-
-If mutual authentication is requested, the service proves it decrypted the ticket by sending back a signed response.
-
-```
-AP-REP contains:
-  └── Timestamp from the Authenticator (encrypted with Service Session Key)
-```
-
-**Both sides are now authenticated. The session begins.**
-
----
-
-## Full Sequence at a Glance
-
-```
-Client                    KDC (AS)          KDC (TGS)              Service
-  │                          │                   │                     │
-  │──── 1. AS-REQ ──────────►│                   │                     │
-  │       username            │                   │                     │
-  │       enc. timestamp      │                   │                     │
-  │                           │                   │                     │
-  │◄─── 2. AS-REP ────────────│                   │                     │
-  │       TGT (opaque)        │                   │                     │
-  │       Session Key         │                   │                     │
-  │                           │                   │                     │
-  │──── 3. TGS-REQ ───────────────────────────►   │                     │
-  │       TGT + Authenticator │                   │                     │
-  │       target SPN          │                   │                     │
-  │                           │                   │                     │
-  │◄─── 4. TGS-REP ───────────────────────────────│                     │
-  │       Service Ticket (opaque)                 │                     │
-  │       Service Session Key                     │                     │
-  │                                                                     │
-  │──── 5. AP-REQ ──────────────────────────────────────────────────►  │
-  │       Service Ticket + Authenticator                                │
-  │                                                                     │
-  │◄─── 6. AP-REP (optional) ───────────────────────────────────────── │
-  │       Mutual auth confirmation                                      │
-  │                                                                     │
-  │═══════════════════════ Authenticated Session ═══════════════════════│
-```
-
----
-
-## Key Security Properties
-
-| Property | How Kerberos Achieves It |
-|----------|--------------------------|
-| **No password on the wire** | Only hashes are used; the password itself is never transmitted |
-| **Mutual authentication** | Both client and service can verify each other |
-| **Replay protection** | Timestamps must be within 5 minutes of the KDC clock |
-| **Single Sign-On (SSO)** | One TGT gives access to many services without re-entering a password |
-| **Least privilege** | Each service ticket is scoped to one specific service |
-
----
-
-## Active Directory Notes (Common Interview Topics)
-
-| Topic | Key Point |
-|-------|-----------|
-| **Golden Ticket** | Compromise of `krbtgt` hash lets an attacker forge TGTs for any user |
-| **Silver Ticket** | Compromise of a service account hash lets an attacker forge Service Tickets for that service (no KDC contact needed) |
-| **Kerberoasting** | Request a service ticket for any SPN, then crack the service account's hash offline |
-| **AS-REP Roasting** | If pre-authentication is disabled, anyone can request an AS-REP and crack the hash offline |
-| **NTLM fallback** | If no SPN is registered for a service, Windows falls back to NTLM |
-| **Ticket lifetimes** | TGT = 10 hrs, max renewal = 7 days, Service Ticket = 10 hrs |
-| **Clock skew** | Kerberos requires clocks to be within **5 minutes** of each other (prevents replay) |
+- **Golden Ticket** — forging a TGT by stealing the `krbtgt` hash
+- **Silver Ticket** — forging a Service Ticket by stealing a service account hash
+- **Kerberoasting** — requesting a Service Ticket then cracking the service account hash offline
+- **AS-REP Roasting** — cracking a user's hash when pre-authentication is disabled
